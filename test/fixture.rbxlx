@@ -1,0 +1,63 @@
+<roblox version="4">
+  <Item class="Workspace" referent="RBX0">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <float name="Gravity">196.2</float>
+    </Properties>
+    <Item class="Part" referent="RBX1">
+      <Properties>
+        <string name="Name">Baseplate</string>
+        <Vector3 name="size"><X>512</X><Y>20</Y><Z>512</Z></Vector3>
+        <Color3uint8 name="Color3uint8">4290032820</Color3uint8>
+      </Properties>
+      <Item class="Script" referent="RBX2">
+        <Properties>
+          <string name="Name">Greeter</string>
+          <ProtectedString name="Source">print("original greeter")</ProtectedString>
+          <bool name="Disabled">false</bool>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ReplicatedStorage" referent="RBX3">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="ModuleScript" referent="RBX4">
+      <Properties>
+        <string name="Name">Util</string>
+        <ProtectedString name="Source">return { original = true }</ProtectedString>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX5">
+        <Properties>
+          <string name="Name">Sub</string>
+          <ProtectedString name="Source">return "child original"</ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX6">
+      <Properties>
+        <string name="Name">Dup</string>
+      </Properties>
+      <Item class="Script" referent="RBX7">
+        <Properties>
+          <string name="Name">Twin</string>
+          <ProtectedString name="Source">print("twin A original")</ProtectedString>
+          <bool name="Disabled">true</bool>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX8">
+      <Properties>
+        <string name="Name">Dup</string>
+      </Properties>
+      <Item class="Script" referent="RBX9">
+        <Properties>
+          <string name="Name">Twin</string>
+          <ProtectedString name="Source">print("twin B original")</ProtectedString>
+          <bool name="Disabled">false</bool>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+</roblox>

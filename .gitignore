@@ -1,0 +1,13 @@
+# Rust build artifacts
+/rust/target/
+
+# Python
+__pycache__/
+*.pyc
+
+# Pack outputs
+*_packed.rbxl
+*_packed.rbxlx
+*_packed.rbxm
+*_packed.rbxmx
+*.packed.*
