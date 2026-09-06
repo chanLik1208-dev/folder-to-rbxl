@@ -1,0 +1,10 @@
+Workspace [Workspace]
+└── Baseplate [Part]
+    └── Greeter [Script]
+ReplicatedStorage [ReplicatedStorage]
+├── Util [ModuleScript]
+│   └── Sub [ModuleScript]
+├── Dup [Folder]
+│   └── Twin [Script] (disabled)
+└── Dup [Folder]
+    └── Twin [Script]

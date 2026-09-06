@@ -63,13 +63,39 @@ Rust (`cargo`) — the engine (`rust/pack-engine`) is built with
 (`rbx_binary` / `rbx_xml` / `rbx_dom_weak`), so — unlike `extract.py` — there is
 **no** pure-Python fallback for packing.
 
+## New mode (`--new`): build a fresh place from a folder tree
+
+For greenfield projects where every script is new (no original to fill), `--new`
+builds a **fresh** place purely from a `src/` tree:
+
+```bash
+python pack.py <project_dir> --new [-o Game.rbxl]
+```
+
+`<project_dir>/src` is used as the tree root when it exists, otherwise
+`<project_dir>` itself; `manifest.json` is not needed. The tree follows the same
+Rojo-style conventions the extractor emits (`*.server.lua(u)` → `Script`,
+`*.client.lua(u)` → `LocalScript`, `*.lua(u)` → `ModuleScript`, a dir with an
+`init.*` file → script-with-children named after the dir, other dirs → `Folder`).
+Top-level dirs map to Roblox services by name (`ReplicatedStorage`,
+`ServerScriptService`, `StarterPlayer/StarterPlayerScripts`, …), and a baseline
+service set is always created so Studio opens the place cleanly. Output format
+follows the output extension (`.rbxlx`/`.rbxmx` = XML, anything else = binary).
+
+Round-trip test: `python test/test_new_mode.py` (builds the fixture both ways,
+re-extracts with rbxl-to-folder, compares sources byte-for-byte, and runs a
+fill-mode regression).
+
 ## Scope / limitations
 
-- **Script source only.** Renaming/adding/deleting instances in the folder is not
-  reflected; only the `Source` of scripts already present in the original is
-  overwritten. (Add a script in Studio, re-extract, then edit.)
-- Requires the **matching** original. A folder extracted from a *different* build
-  of the place will fail the count / integrity check.
+- **Fill mode is script source only.** Renaming/adding/deleting instances in the
+  folder is not reflected; only the `Source` of scripts already present in the
+  original is overwritten. (Add a script in Studio, re-extract, then edit — or
+  use `--new` for fully code-defined projects.)
+- Fill mode requires the **matching** original. A folder extracted from a
+  *different* build of the place will fail the count / integrity check.
+- New mode emits scripts/Folders/services only — no geometry or non-default
+  properties; anything else must be created at runtime by code.
 
 ---
 
@@ -116,8 +142,26 @@ python pack.py <解壓資料夾> --original <原始.rbxl> [-o 輸出]
 需要 Rust(`cargo`),首次執行自動 `cargo build --release`。忠實寫出二進位 `.rbxl`
 需要 rbx-dom crates,所以(不像 `extract.py`)打包**沒有**純 Python fallback。
 
+## 新模式(`--new`):從資料夾樹直接生成全新 place
+
+全新專案(所有腳本都是新的、沒有原始檔可填)用 `--new` 直接從 `src/` 樹**建出全新** place:
+
+```bash
+python pack.py <專案目錄> --new [-o Game.rbxl]
+```
+
+`<專案目錄>/src` 存在時作為樹根,否則用 `<專案目錄>` 本身;不需要 `manifest.json`。
+命名慣例與解壓輸出相同(`*.server.lua(u)` → `Script`、`*.client.lua(u)` →
+`LocalScript`、`*.lua(u)` → `ModuleScript`、含 `init.*` 的目錄 → 帶子物件的腳本、
+其他目錄 → `Folder`)。頂層目錄依名稱對應 Roblox 服務,並固定建立基線服務集讓
+Studio 乾淨開啟。輸出格式跟隨輸出副檔名(`.rbxlx`/`.rbxmx` = XML,其他 = 二進位)。
+
+Round-trip 測試:`python test/test_new_mode.py`。
+
 ## 範圍 / 限制
 
-- **只處理腳本原始碼。** 在資料夾裡改名/新增/刪除物件不會反映;只會覆寫原始檔中既有腳本的
-  `Source`。(要新增腳本請在 Studio 加、重新解壓、再編輯。)
-- 需要**對應的**原始檔。用另一個版本的 place 解壓出的資料夾會過不了數量/完整性檢查。
+- **Fill 模式只處理腳本原始碼。** 在資料夾裡改名/新增/刪除物件不會反映;只會覆寫原始檔中
+  既有腳本的 `Source`。(要新增腳本請在 Studio 加、重新解壓、再編輯——或全程式碼專案
+  改用 `--new`。)
+- Fill 模式需要**對應的**原始檔。用另一個版本的 place 解壓出的資料夾會過不了數量/完整性檢查。
+- New 模式只產生腳本/Folder/服務——不含幾何與非預設屬性;其他東西一律由程式在執行期建立。

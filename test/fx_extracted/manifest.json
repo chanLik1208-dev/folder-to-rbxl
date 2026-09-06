@@ -1,0 +1,63 @@
+[
+  {
+    "path": "Workspace",
+    "class": "Workspace",
+    "isScript": false,
+    "file": null
+  },
+  {
+    "path": "Workspace/Baseplate",
+    "class": "Part",
+    "isScript": false,
+    "file": null
+  },
+  {
+    "path": "Workspace/Baseplate/Greeter",
+    "class": "Script",
+    "isScript": true,
+    "file": "Workspace/Baseplate/Greeter.server.lua"
+  },
+  {
+    "path": "ReplicatedStorage",
+    "class": "ReplicatedStorage",
+    "isScript": false,
+    "file": null
+  },
+  {
+    "path": "ReplicatedStorage/Util",
+    "class": "ModuleScript",
+    "isScript": true,
+    "file": "ReplicatedStorage/Util/init.lua"
+  },
+  {
+    "path": "ReplicatedStorage/Util/Sub",
+    "class": "ModuleScript",
+    "isScript": true,
+    "file": "ReplicatedStorage/Util/Sub.lua"
+  },
+  {
+    "path": "ReplicatedStorage/Dup",
+    "class": "Folder",
+    "isScript": false,
+    "file": null
+  },
+  {
+    "path": "ReplicatedStorage/Dup/Twin",
+    "class": "Script",
+    "isScript": true,
+    "file": "ReplicatedStorage/Dup/Twin.server.lua",
+    "disabled": true
+  },
+  {
+    "path": "ReplicatedStorage/Dup",
+    "class": "Folder",
+    "isScript": false,
+    "file": null
+  },
+  {
+    "path": "ReplicatedStorage/Dup/Twin",
+    "class": "Script",
+    "isScript": true,
+    "file": "ReplicatedStorage/Dup/Twin_2.server.lua"
+  }
+]

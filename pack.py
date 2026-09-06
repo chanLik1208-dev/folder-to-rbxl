@@ -9,17 +9,31 @@ rebuild works by COPYING the original file's full DOM and overwriting only the
 script sources from the edited folder tree. Geometry, every non-script property,
 non-script instances, and the Disabled flag all ride along untouched.
 
-Because of that, you MUST supply the original file the folder was extracted from.
+Because of that, in fill mode you MUST supply the original file the folder was
+extracted from.
+
+NEW MODE (--new): build a FRESH place purely from a src/ folder tree — no
+original needed. For greenfield projects where every script is new. The tree
+follows the same Rojo-style conventions the extractor emits (*.server.lua →
+Script, *.client.lua → LocalScript, *.lua → ModuleScript, init.* for
+script-with-children); top-level dirs map to Roblox services by name, and a
+baseline service set is always created so Studio opens the place cleanly.
 
 Usage:
-    python pack.py <extracted_dir> --original <orig.rbxl> [-o OUTPUT]
+    python pack.py <extracted_dir> --original <orig.rbxl> [-o OUTPUT]   # fill
+    python pack.py <project_dir> --new [-o OUTPUT]                      # new
 
 Examples:
     python pack.py ./MyGame_extracted --original MyGame.rbxl
     python pack.py ./MyGame_extracted --original MyGame.rbxl -o MyGame.patched.rbxl
+    python pack.py ./my-new-game --new -o MyNewGame.rbxl
 
-Without -o, output goes next to the extracted dir as
-    <extracted_dir>_packed<ext of original>
+In new mode <project_dir>/src is used as the tree root when it exists,
+otherwise <project_dir> itself. manifest.json is not required.
+
+Without -o, fill mode outputs <extracted_dir>_packed<ext of original>;
+new mode outputs <project_dir>_new.rbxl. Output format follows the output
+extension in new mode (.rbxlx/.rbxmx = XML, anything else = binary).
 
 Requires Rust (`cargo`); the engine is built with `cargo build --release` on
 first use. Writing a faithful binary .rbxl needs the rbx-dom crates, so unlike
@@ -62,43 +76,55 @@ def ensure_rust_built():
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Re-inject edited scripts into a copy of the original "
-                    "Roblox file and write a new one.")
-    ap.add_argument("extracted_dir",
-                    help="the folder produced by extract.py (contains "
-                         "manifest.json and src/)")
-    ap.add_argument("--original", required=True,
-                    help="the original .rbxl/.rbxlx/.rbxm/.rbxmx the folder "
-                         "was extracted from (copied, then scripts filled in)")
+        description="Fill mode: re-inject edited scripts into a copy of the "
+                    "original Roblox file. New mode (--new): build a fresh "
+                    "place from a src/ folder tree, no original needed.")
+    ap.add_argument("extracted_dir", metavar="dir",
+                    help="fill mode: the folder produced by extract.py "
+                         "(contains manifest.json and src/); new mode: the "
+                         "project dir (its src/ is used when present)")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--original",
+                      help="the original .rbxl/.rbxlx/.rbxm/.rbxmx the folder "
+                           "was extracted from (copied, then scripts filled in)")
+    mode.add_argument("--new", action="store_true",
+                      help="build a fresh place purely from the folder tree")
     ap.add_argument("-o", "--out",
-                    help="output path (default: <extracted_dir>_packed<ext>)")
+                    help="output path (default: <dir>_packed<ext> in fill "
+                         "mode, <dir>_new.rbxl in new mode)")
     args = ap.parse_args()
 
     if not os.path.isdir(args.extracted_dir):
         sys.exit(f"error: no such directory: {args.extracted_dir}")
-    manifest = os.path.join(args.extracted_dir, "manifest.json")
-    if not os.path.isfile(manifest):
-        sys.exit(f"error: {manifest} not found — is this an extract.py output "
-                 f"folder?")
-    if not os.path.isfile(args.original):
-        sys.exit(f"error: no such file: {args.original}")
+    base = os.path.normpath(args.extracted_dir).rstrip(os.sep)
 
-    ext = os.path.splitext(args.original)[1] or ".rbxl"
-    outdir = args.out
-    if not outdir:
-        base = os.path.normpath(args.extracted_dir).rstrip(os.sep)
-        outdir = base + "_packed" + ext
+    if args.new:
+        src_root = os.path.join(args.extracted_dir, "src")
+        if not os.path.isdir(src_root):
+            src_root = args.extracted_dir
+        out = args.out or (base + "_new.rbxl")
+        engine_args = ["--new", src_root, out]
+    else:
+        manifest = os.path.join(args.extracted_dir, "manifest.json")
+        if not os.path.isfile(manifest):
+            sys.exit(f"error: {manifest} not found — is this an extract.py "
+                     f"output folder?")
+        if not os.path.isfile(args.original):
+            sys.exit(f"error: no such file: {args.original}")
+        ext = os.path.splitext(args.original)[1] or ".rbxl"
+        out = args.out or (base + "_packed" + ext)
+        engine_args = [args.original, args.extracted_dir, out]
 
     exe = ensure_rust_built()
     try:
         subprocess.run(
-            [exe, args.original, args.extracted_dir, outdir],
+            [exe] + engine_args,
             check=True, stderr=sys.stderr, stdout=sys.stderr,
         )
     except subprocess.CalledProcessError as e:
         sys.exit(f"error: pack-engine failed (exit {e.returncode})")
 
-    print(f"[pack] output -> {outdir}")
+    print(f"[pack] output -> {out}")
 
 
 if __name__ == "__main__":
