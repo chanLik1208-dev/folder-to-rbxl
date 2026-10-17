@@ -1,0 +1,19 @@
+<roblox version="4">
+	<Item class="Folder" referent="K1">
+		<Properties>
+			<string name="Name">Kit</string>
+		</Properties>
+		<Item class="StringValue" referent="K2">
+			<Properties>
+				<string name="Name">Label</string>
+				<string name="Value">hello</string>
+			</Properties>
+		</Item>
+		<Item class="ObjectValue" referent="K3">
+			<Properties>
+				<string name="Name">Pointer</string>
+				<Ref name="Value">K2</Ref>
+			</Properties>
+		</Item>
+	</Item>
+</roblox>

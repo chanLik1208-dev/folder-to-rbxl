@@ -86,12 +86,46 @@ Round-trip test: `python test/test_new_mode.py` (builds the fixture both ways,
 re-extracts with rbxl-to-folder, compares sources byte-for-byte, and runs a
 fill-mode regression).
 
+## Inject (`--inject`): add new scripts and models in fill mode
+
+Fill mode can't see instances that aren't in the original. `--inject` runs
+after filling and adds them from a JSON spec:
+
+```bash
+python pack.py ./MyGame_extracted --original MyGame.rbxl --inject spec.json -o MyGame.patched.rbxl
+```
+
+```json
+{
+  "scripts": [
+    { "path": ["ReplicatedStorage", "Mods", "NewModule"], "class": "ModuleScript",
+      "file": "src/ReplicatedStorage/Mods/NewModule.lua" }
+  ],
+  "models": [
+    { "parent": ["StarterGui"], "file": "gui/MyGui.rbxmx" }
+  ]
+}
+```
+
+- Paths are instance **names** from the DataModel root; `file` is relative to
+  the spec file.
+- If a path segment matches several same-named siblings, the entry is applied
+  to **every** match (the log prints the counts).
+- `scripts`: created if absent; if an instance of the same class already
+  exists its `Source` is replaced; a different class is an error.
+- `models`: each top-level item of the `.rbxm(x)` is cloned under every
+  matching parent (Ref properties inside the model are rewritten to the clones).
+  A parent that already has a child with that name is skipped.
+- A missing parent is an error (nothing is written).
+
+Test: `python test/test_inject.py`.
+
 ## Scope / limitations
 
-- **Fill mode is script source only.** Renaming/adding/deleting instances in the
-  folder is not reflected; only the `Source` of scripts already present in the
-  original is overwritten. (Add a script in Studio, re-extract, then edit — or
-  use `--new` for fully code-defined projects.)
+- **Fill mode is script source only** — unless you describe additions with
+  `--inject` (above). Renaming/deleting instances in the folder is still not
+  reflected; only the `Source` of scripts already present in the original is
+  overwritten.
 - Fill mode requires the **matching** original. A folder extracted from a
   *different* build of the place will fail the count / integrity check.
 - New mode emits scripts/Folders/services only — no geometry or non-default
@@ -158,10 +192,23 @@ Studio 乾淨開啟。輸出格式跟隨輸出副檔名(`.rbxlx`/`.rbxmx` = XML,
 
 Round-trip 測試:`python test/test_new_mode.py`。
 
+## 注入(`--inject`):在 fill 模式下新增腳本與模型
+
+Fill 模式看不到原始檔裡沒有的物件。`--inject` 在填完之後,依 JSON 規格把它們加進去
+(格式見英文段落的範例):
+
+- 路徑是從 DataModel 根開始的**實例名字**;`file` 相對於規格檔所在資料夾。
+- 某一層有多個同名兄弟時,會套用到**每一個**(日誌會印出數量)。
+- `scripts`:不存在就新建;已有同類別的就覆寫 `Source`;類別不同視為錯誤。
+- `models`:`.rbxm(x)` 的每個頂層物件複製到每個符合的父物件底下(模型內的 Ref 會改指向複本);
+  父物件底下已有同名子物件就跳過。
+- 父物件不存在視為錯誤(不會寫出任何檔案)。
+
+測試:`python test/test_inject.py`。
+
 ## 範圍 / 限制
 
-- **Fill 模式只處理腳本原始碼。** 在資料夾裡改名/新增/刪除物件不會反映;只會覆寫原始檔中
-  既有腳本的 `Source`。(要新增腳本請在 Studio 加、重新解壓、再編輯——或全程式碼專案
-  改用 `--new`。)
+- **Fill 模式只處理腳本原始碼** —— 新增物件請用 `--inject`(見上)。在資料夾裡改名/刪除物件
+  仍不會反映;只會覆寫原始檔中既有腳本的 `Source`。
 - Fill 模式需要**對應的**原始檔。用另一個版本的 place 解壓出的資料夾會過不了數量/完整性檢查。
 - New 模式只產生腳本/Folder/服務——不含幾何與非預設屬性;其他東西一律由程式在執行期建立。

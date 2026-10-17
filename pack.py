@@ -22,6 +22,8 @@ baseline service set is always created so Studio opens the place cleanly.
 Usage:
     python pack.py <extracted_dir> --original <orig.rbxl> [-o OUTPUT]   # fill
     python pack.py <project_dir> --new [-o OUTPUT]                      # new
+    python pack.py <extracted_dir> --original <orig.rbxl> --inject spec.json
+        # fill, then add new scripts / insert .rbxm(x) models (see README → Inject)
 
 Examples:
     python pack.py ./MyGame_extracted --original MyGame.rbxl
@@ -92,7 +94,15 @@ def main():
     ap.add_argument("-o", "--out",
                     help="output path (default: <dir>_packed<ext> in fill "
                          "mode, <dir>_new.rbxl in new mode)")
+    ap.add_argument("--inject", metavar="SPEC_JSON",
+                    help="fill mode only: after filling, add new scripts and "
+                         "insert .rbxm(x) models described by this JSON spec "
+                         "(see README → Inject)")
     args = ap.parse_args()
+    if args.inject and args.new:
+        sys.exit("error: --inject only works in fill mode (--original)")
+    if args.inject and not os.path.isfile(args.inject):
+        sys.exit(f"error: no such file: {args.inject}")
 
     if not os.path.isdir(args.extracted_dir):
         sys.exit(f"error: no such directory: {args.extracted_dir}")
@@ -114,6 +124,8 @@ def main():
         ext = os.path.splitext(args.original)[1] or ".rbxl"
         out = args.out or (base + "_packed" + ext)
         engine_args = [args.original, args.extracted_dir, out]
+        if args.inject:
+            engine_args += ["--inject", args.inject]
 
     exe = ensure_rust_built()
     try:

@@ -20,6 +20,24 @@
 //!
 //!   pack-engine --new <src_dir> <output.rbxl|.rbxlx>
 //!
+//! **Inject (fill-mode add-on)**: after filling, add instances the original
+//! does not have — new scripts, and whole models from `.rbxm(x)` files:
+//!
+//!   pack-engine <original> <extracted_dir> <output> --inject <spec.json>
+//!
+//!   {
+//!     "scripts": [ { "path": ["ReplicatedStorage", "Mods", "NewModule"],
+//!                    "class": "ModuleScript", "file": "src/ReplicatedStorage/Mods/NewModule.lua" } ],
+//!     "models":  [ { "parent": ["StarterGui"], "file": "gui/MyGui.rbxmx" } ]
+//!   }
+//!
+//! Paths are instance names from the DataModel root; file paths are relative
+//! to the spec file. A path that matches several same-named siblings is
+//! applied to EVERY match (the log reports counts). Scripts are created if
+//! absent, or have their Source replaced if an instance of the same class
+//! already exists. Model items are cloned under every matching parent; an
+//! existing child with the same name is left alone (skipped).
+//!
 //! Fill-mode matching strategy: the extractor emits `manifest.json` whose
 //! entries are in pre-order DFS order. We reload the original with the SAME
 //! rbx-dom crate, walk it in the same pre-order, collect the script instances
@@ -314,13 +332,21 @@ fn main() {
     }
 
     if args.len() < 4 {
-        eprintln!("usage: pack-engine <original> <extracted_dir> <output>");
+        eprintln!("usage: pack-engine <original> <extracted_dir> <output> [--inject <spec.json>]");
         eprintln!("       pack-engine --new <src_dir> <output>");
         exit(2);
     }
     let original = PathBuf::from(&args[1]);
     let extracted_dir = PathBuf::from(&args[2]);
     let output = PathBuf::from(&args[3]);
+    let inject_spec: Option<PathBuf> = match args.get(4).map(String::as_str) {
+        None => None,
+        Some("--inject") => Some(PathBuf::from(
+            args.get(5)
+                .unwrap_or_else(|| die("--inject needs a spec.json path".into())),
+        )),
+        Some(other) => die(format!("unknown argument '{other}'")),
+    };
 
     // --- load + decode original (this becomes the copy we fill in) ---
     let bytes = fs::read(&original)
@@ -410,6 +436,10 @@ fn main() {
         injected += 1;
     }
 
+    if let Some(spec) = &inject_spec {
+        apply_inject(&mut dom, spec);
+    }
+
     // --- serialize the filled copy ---
     // Output format follows the OUTPUT extension (.rbxlx/.rbxmx = XML, else binary),
     // not the input format. Lets fill mode emit rbxmx/rbxlx from a binary original.
@@ -425,6 +455,162 @@ fn main() {
         if missing.is_empty() { String::new() } else { format!(": {}", missing.join(", ")) }
     );
     eprintln!("pack-engine: wrote {}", output.display());
+}
+
+// ---------------------------------------------------------------------------
+// Inject: add new scripts / models after filling
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize, Default)]
+struct InjectSpec {
+    #[serde(default)]
+    scripts: Vec<InjectScript>,
+    #[serde(default)]
+    models: Vec<InjectModel>,
+}
+
+#[derive(Deserialize)]
+struct InjectScript {
+    path: Vec<String>,
+    class: String,
+    file: String,
+}
+
+#[derive(Deserialize)]
+struct InjectModel {
+    parent: Vec<String>,
+    file: String,
+}
+
+/// Every instance reachable by following `path` (names) from the DataModel
+/// root. Same-named siblings fan out, so the result can hold several refs.
+fn resolve_all(dom: &WeakDom, path: &[String]) -> Vec<Ref> {
+    let mut current = vec![dom.root_ref()];
+    for name in path {
+        let mut next = Vec::new();
+        for r in &current {
+            if let Some(inst) = dom.get_by_ref(*r) {
+                for c in inst.children() {
+                    if let Some(ci) = dom.get_by_ref(*c) {
+                        if ci.name == *name {
+                            next.push(*c);
+                        }
+                    }
+                }
+            }
+        }
+        if next.is_empty() {
+            return next;
+        }
+        current = next;
+    }
+    current
+}
+
+fn child_named(dom: &WeakDom, parent: Ref, name: &str) -> Option<Ref> {
+    dom.get_by_ref(parent)?
+        .children()
+        .iter()
+        .copied()
+        .find(|c| dom.get_by_ref(*c).map(|i| i.name == name).unwrap_or(false))
+}
+
+fn load_model(path: &Path) -> WeakDom {
+    let bytes = fs::read(path).unwrap_or_else(|e| die(format!("cannot read {}: {e}", path.display())));
+    if bytes.starts_with(b"<roblox!") {
+        rbx_binary::from_reader(bytes.as_slice())
+            .unwrap_or_else(|e| die(format!("binary decode failed for {}: {e}", path.display())))
+    } else {
+        rbx_xml::from_reader(
+            bytes.as_slice(),
+            rbx_xml::DecodeOptions::new()
+                .property_behavior(rbx_xml::DecodePropertyBehavior::ReadUnknown),
+        )
+        .unwrap_or_else(|e| die(format!("xml decode failed for {}: {e}", path.display())))
+    }
+}
+
+fn apply_inject(dom: &mut WeakDom, spec_path: &Path) {
+    let raw = fs::read_to_string(spec_path)
+        .unwrap_or_else(|e| die(format!("cannot read {}: {e}", spec_path.display())));
+    let spec: InjectSpec = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| die(format!("inject spec parse error: {e}")));
+    let base = spec_path.parent().unwrap_or_else(|| Path::new("."));
+
+    let (mut created, mut replaced, mut inserted, mut skipped) = (0usize, 0usize, 0usize, 0usize);
+
+    for s in &spec.scripts {
+        if !is_script(&s.class) {
+            die(format!("inject: '{}' is not a script class", s.class));
+        }
+        if s.path.is_empty() {
+            die("inject: empty script path".into());
+        }
+        let source = fs::read(base.join(&s.file))
+            .unwrap_or_else(|e| die(format!("cannot read {}: {e}", s.file)));
+        let source = String::from_utf8_lossy(&source).into_owned();
+        let (parent_path, leaf) = s.path.split_at(s.path.len() - 1);
+        let name = &leaf[0];
+        let parents = resolve_all(dom, parent_path);
+        if parents.is_empty() {
+            die(format!("inject: parent not found for {}", s.path.join(".")));
+        }
+        for parent in parents {
+            match child_named(dom, parent, name) {
+                Some(existing) => {
+                    let inst = dom.get_by_ref_mut(existing).expect("child exists");
+                    if inst.class.as_str() != s.class {
+                        die(format!(
+                            "inject: {} exists as {} (wanted {})",
+                            s.path.join("."),
+                            inst.class,
+                            s.class
+                        ));
+                    }
+                    inst.properties.insert(ustr("Source"), Variant::String(source.clone()));
+                    replaced += 1;
+                }
+                None => {
+                    dom.insert(
+                        parent,
+                        InstanceBuilder::new(s.class.as_str())
+                            .with_name(name.as_str())
+                            .with_property("Source", Variant::String(source.clone())),
+                    );
+                    created += 1;
+                }
+            }
+        }
+    }
+
+    for m in &spec.models {
+        let model = load_model(&base.join(&m.file));
+        let items: Vec<Ref> = model.root().children().to_vec();
+        let parents = resolve_all(dom, &m.parent);
+        if parents.is_empty() {
+            die(format!(
+                "inject: model parent not found: {} ({})",
+                m.parent.join("."),
+                m.file
+            ));
+        }
+        for parent in parents {
+            for item in &items {
+                let item_name = model.get_by_ref(*item).map(|i| i.name.clone()).unwrap_or_default();
+                if child_named(dom, parent, &item_name).is_some() {
+                    skipped += 1;
+                    continue;
+                }
+                let cloned = model.clone_into_external(*item, dom);
+                dom.transfer_within(cloned, parent);
+                inserted += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "pack-engine: inject: created {created} script(s), replaced {replaced}, inserted {inserted} model item(s), skipped {skipped} existing"
+    );
 }
 
 fn write_dom(dom: &WeakDom, output: &Path, is_binary: bool) {
