@@ -9,6 +9,13 @@
 				<string name="Value">hello</string>
 			</Properties>
 		</Item>
+		<!-- Color3uint8 for a Color3 property: what sculpt-generated GUIs emit; binary output must still encode -->
+		<Item class="Frame" referent="K4">
+			<Properties>
+				<string name="Name">Swatch</string>
+				<Color3uint8 name="BackgroundColor3">4294901760</Color3uint8>
+			</Properties>
+		</Item>
 		<Item class="ObjectValue" referent="K3">
 			<Properties>
 				<string name="Name">Pointer</string>

@@ -50,7 +50,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use rbx_dom_weak::types::{Ref, Variant};
+use rbx_dom_weak::types::{Color3, Ref, Variant};
 use rbx_dom_weak::{ustr, InstanceBuilder, WeakDom};
 use serde::Deserialize;
 
@@ -515,7 +515,37 @@ fn child_named(dom: &WeakDom, parent: Ref, name: &str) -> Option<Ref> {
         .find(|c| dom.get_by_ref(*c).map(|i| i.name == name).unwrap_or(false))
 }
 
+/// Hand-written / tool-generated .rbxmx files often store colors as
+/// `Color3uint8` even for properties whose canonical type is `Color3`
+/// (e.g. `GuiObject.BackgroundColor3`). Studio converts on load, but the
+/// binary encoder rejects the mismatch ("Expected Frame.BackgroundColor3 to be
+/// of type Color3, but it was of type Color3uint8"). Every Color3uint8
+/// property in rbx-dom's database has canonical type Color3, so converting
+/// unconditionally is safe.
+fn canonicalize_colors(dom: &mut WeakDom) {
+    let refs: Vec<Ref> = dom.descendants().map(|i| i.referent()).collect();
+    for r in refs {
+        if let Some(inst) = dom.get_by_ref_mut(r) {
+            for (_, value) in inst.properties.iter_mut() {
+                if let Variant::Color3uint8(c) = value {
+                    *value = Variant::Color3(Color3::new(
+                        c.r as f32 / 255.0,
+                        c.g as f32 / 255.0,
+                        c.b as f32 / 255.0,
+                    ));
+                }
+            }
+        }
+    }
+}
+
 fn load_model(path: &Path) -> WeakDom {
+    let mut dom = load_model_raw(path);
+    canonicalize_colors(&mut dom);
+    dom
+}
+
+fn load_model_raw(path: &Path) -> WeakDom {
     let bytes = fs::read(path).unwrap_or_else(|e| die(format!("cannot read {}: {e}", path.display())));
     if bytes.starts_with(b"<roblox!") {
         rbx_binary::from_reader(bytes.as_slice())
